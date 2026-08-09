@@ -110,7 +110,7 @@ function DefectTable({ defects, onRowClick }) {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {['ID', 'Title', 'Project', 'Module', 'Severity', 'Status', 'Team', 'Created'].map(h => (
+            {['ID', 'Title', 'Project', 'Severity', 'Status', 'Team', 'Created'].map(h => (
               <th key={h} style={{
                 padding: '10px 16px', textAlign: 'left', fontSize: 12,
                 fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase',
@@ -133,7 +133,6 @@ function DefectTable({ defects, onRowClick }) {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', whiteSpace: 'nowrap' }}>{d.title}</span>
               </td>
               <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{d.project_name || '—'}</td>
-              <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{d.module_name || '—'}</td>
               <td style={{ padding: '12px 16px' }}><SeverityBadge severity={d.severity} /></td>
               <td style={{ padding: '12px 16px' }}><StatusBadge status={d.status} /></td>
               <td style={{ padding: '12px 16px', fontSize: 13, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{d.assigned_team}</td>

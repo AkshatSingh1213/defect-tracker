@@ -7,11 +7,9 @@ const TEAMS = ['dev', 'fmw', 'mobility'];
 export default function AdminPanel() {
   const [users, setUsers] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [modules, setModules] = useState({});
   const [activeTab, setActiveTab] = useState('users');
   const [showUserForm, setShowUserForm] = useState(false);
-  const [editingUser, setEditingUser] = useState(null); // user object being edited
-  const [showModuleForm, setShowModuleForm] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
@@ -22,7 +20,6 @@ export default function AdminPanel() {
   const [editForm, setEditForm] = useState({
     name: '', email: '', role: 'qa', team: '', slack_user_id: '', password: '',
   });
-  const [moduleForm, setModuleForm] = useState({ name: '' });
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -30,12 +27,6 @@ export default function AdminPanel() {
   const fetchProjects = async () => {
     const res = await api.get('/projects');
     setProjects(res.data);
-    const mods = {};
-    for (const p of res.data) {
-      const r = await api.get(`/projects/${p.id}/modules`);
-      mods[p.id] = r.data;
-    }
-    setModules(mods);
   };
 
   useEffect(() => { fetchUsers(); fetchProjects(); }, []);
@@ -68,7 +59,7 @@ export default function AdminPanel() {
     setError('');
     try {
       const payload = { ...editForm };
-      if (!payload.password) delete payload.password; // don't send empty password
+      if (!payload.password) delete payload.password;
       await api.patch(`/users/${editingUser.id}`, payload);
       await fetchUsers();
       setEditingUser(null);
@@ -84,21 +75,6 @@ export default function AdminPanel() {
     await api.patch(`/users/${userId}`, { is_active: !isActive });
     fetchUsers();
     showToast(isActive ? 'User deactivated' : 'User activated');
-  };
-
-  const handleAddModule = async (projectId, e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await api.post(`/projects/${projectId}/modules`, { name: moduleForm.name });
-      await fetchProjects();
-      setShowModuleForm(null);
-      setModuleForm({ name: '' });
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to add module');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const inputStyle = {
@@ -138,7 +114,7 @@ export default function AdminPanel() {
 
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>Admin Panel</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 2 }}>Manage users, projects, and modules</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: 2 }}>Manage users and projects</p>
       </div>
 
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
@@ -146,7 +122,7 @@ export default function AdminPanel() {
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--hover-bg)', display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <button style={tabStyle(activeTab === 'users')} onClick={() => setActiveTab('users')}>Users ({users.length})</button>
-            <button style={tabStyle(activeTab === 'projects')} onClick={() => setActiveTab('projects')}>Projects & Modules</button>
+            <button style={tabStyle(activeTab === 'projects')} onClick={() => setActiveTab('projects')}>Projects</button>
           </div>
           {activeTab === 'users' && (
             <button onClick={() => { setShowUserForm(true); setEditingUser(null); }} style={{
@@ -265,7 +241,7 @@ export default function AdminPanel() {
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      {new Date(u.created_at).toLocaleDateString()}
+                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
@@ -296,56 +272,18 @@ export default function AdminPanel() {
           </div>
         )}
 
-        {/* Projects & Modules */}
+        {/* Projects */}
         {activeTab === 'projects' && (
           <div style={{ padding: 20 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
               {projects.map(p => (
-                <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{
-                    padding: '14px 16px', background: 'var(--hover-bg)',
-                    borderBottom: '1px solid var(--border)', display: 'flex',
-                    justifyContent: 'space-between', alignItems: 'center',
-                  }}>
-                    <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{p.name}</h4>
-                    <button
-                      onClick={() => setShowModuleForm(showModuleForm === p.id ? null : p.id)}
-                      style={{
-                        padding: '5px 12px', background: '#0d9488', color: 'white',
-                        border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                      }}
-                    >+ Module</button>
-                  </div>
-
-                  {showModuleForm === p.id && (
-                    <form onSubmit={(e) => handleAddModule(p.id, e)} style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--hover-bg)' }}>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <input
-                          style={{ ...inputStyle, flex: 1 }}
-                          value={moduleForm.name}
-                          onChange={e => setModuleForm({ name: e.target.value })}
-                          placeholder="Module name..."
-                          required
-                        />
-                        <button type="submit" style={{ padding: '9px 16px', background: '#0d9488', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>Add</button>
-                      </div>
-                    </form>
-                  )}
-
-                  <div style={{ padding: '8px 0' }}>
-                    {(modules[p.id] || []).length === 0 ? (
-                      <div style={{ padding: '16px', color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }}>No modules yet</div>
-                    ) : (
-                      (modules[p.id] || []).map(m => (
-                        <div key={m.id} style={{
-                          padding: '9px 16px', fontSize: 13, color: 'var(--text-secondary)',
-                          borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: 8,
-                        }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0d9488', flexShrink: 0 }} />
-                          {m.name}
-                        </div>
-                      ))
-                    )}
+                <div key={p.id} style={{
+                  border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden',
+                  padding: '16px',
+                }}>
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{p.name}</h4>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Created: {p.created_at ? new Date(p.created_at).toLocaleDateString() : '—'}
                   </div>
                 </div>
               ))}

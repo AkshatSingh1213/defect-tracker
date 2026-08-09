@@ -27,7 +27,7 @@ const initSlack = () => {
   slackApp.command('/raise-defect', async ({ ack, client, body }) => {
     await ack();
     try {
-      const projects = await pool.query('SELECT id, name FROM projects ORDER BY name');
+      const projects = await pool.query('SELECT id, name FROM projects ORDER BY name ASC');
       const projectOptions = projects.rows.map(p => ({
         text: { type: 'plain_text', text: p.name },
         value: String(p.id),
@@ -135,25 +135,31 @@ const initSlack = () => {
       const environment = vals.env_block.env_select.selected_option.value;
       const severity = vals.severity_block.severity_select.selected_option.value;
       const assignedTeam = vals.team_block.team_select.selected_option.value;
-      const steps = vals.steps_block?.steps_input?.value || '';
+      const steps = vals.steps_block?.steps_input?.value || null;
       const slackUserId = body.user.id;
 
       // Match slack user to system user
-      const userResult = await pool.query('SELECT id FROM users WHERE slack_user_id = $1', [slackUserId]);
+      const userResult = await pool.query('SELECT id FROM users WHERE slack_user_id = :1', [slackUserId]);
       const raisedByUserId = userResult.rows[0]?.id || null;
 
-      const defectResult = await pool.query(`
+      await pool.query(`
         INSERT INTO defects (title, project_id, environment, severity, steps_to_reproduce, status, assigned_team, raised_by_user_id)
-        VALUES ($1, $2, $3, $4, $5, 'Open', $6, $7)
-        RETURNING *
+        VALUES (:1, :2, :3, :4, :5, 'Open', :6, :7)
       `, [title, projectId, environment, severity, steps, assignedTeam, raisedByUserId]);
+
+      const defectResult = await pool.query(`
+        SELECT * FROM (
+          SELECT * FROM defects WHERE raised_by_user_id = :1 AND title = :2
+          ORDER BY created_at DESC
+        ) WHERE ROWNUM = 1
+      `, [raisedByUserId, title]);
 
       const defect = defectResult.rows[0];
 
       if (raisedByUserId) {
         await pool.query(`
           INSERT INTO audit_log (defect_id, changed_by_user_id, old_status, new_status, note)
-          VALUES ($1, $2, NULL, 'Open', 'Raised via Slack /raise-defect')
+          VALUES (:1, :2, NULL, 'Open', 'Raised via Slack /raise-defect')
         `, [defect.id, raisedByUserId]);
       }
 

@@ -3,26 +3,17 @@ import api from '../services/api';
 
 export default function RaiseDefectModal({ onClose, onSuccess }) {
   const [form, setForm] = useState({
-    title: '', project_id: '', module_id: '', environment: 'SIT',
+    title: '', project_id: '', environment: 'SIT',
     severity: 'Sev3', steps_to_reproduce: '', assigned_team: 'dev',
   });
   const [files, setFiles] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data));
   }, []);
-
-  useEffect(() => {
-    if (form.project_id) {
-      api.get(`/projects/${form.project_id}/modules`).then(r => setModules(r.data));
-    } else {
-      setModules([]);
-    }
-  }, [form.project_id]);
 
   const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -90,7 +81,7 @@ export default function RaiseDefectModal({ onClose, onSuccess }) {
             <input style={inputStyle} name="title" value={form.title} onChange={handleChange} placeholder="Brief description of the defect" required />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Project <span style={{ color: '#dc2626' }}>*</span></label>
               <select style={inputStyle} name="project_id" value={form.project_id} onChange={handleChange} required>
@@ -98,16 +89,6 @@ export default function RaiseDefectModal({ onClose, onSuccess }) {
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>Module</label>
-              <select style={inputStyle} name="module_id" value={form.module_id} onChange={handleChange}>
-                <option value="">Select module</option>
-                {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Environment <span style={{ color: '#dc2626' }}>*</span></label>
               <select style={inputStyle} name="environment" value={form.environment} onChange={handleChange} required>
@@ -120,20 +101,21 @@ export default function RaiseDefectModal({ onClose, onSuccess }) {
                 {['Sev1', 'Sev2', 'Sev3', 'Observation'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>Assign to Team <span style={{ color: '#dc2626' }}>*</span></label>
-              <select style={inputStyle} name="assigned_team" value={form.assigned_team} onChange={handleChange} required>
-                <option value="dev">Dev</option>
-                <option value="fmw">FMW</option>
-                <option value="mobility">Mobility</option>
-              </select>
-            </div>
+          </div>
+
+          <div style={{ ...fieldStyle }}>
+            <label style={labelStyle}>Assign to Team <span style={{ color: '#dc2626' }}>*</span></label>
+            <select style={inputStyle} name="assigned_team" value={form.assigned_team} onChange={handleChange} required>
+              <option value="dev">Dev</option>
+              <option value="fmw">FMW</option>
+              <option value="mobility">Mobility</option>
+            </select>
           </div>
 
           <div style={fieldStyle}>
             <label style={labelStyle}>Steps to Reproduce</label>
             <textarea
-              style={{ ...inputStyle, minHeight: 120, resize: 'vertical' }}
+              style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
               name="steps_to_reproduce"
               value={form.steps_to_reproduce}
               onChange={handleChange}

@@ -10,7 +10,7 @@ import {
 
 // ── Status Change Control ──────────────────────────────────────────────────────
 const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
-  const [step, setStep] = useState(null); // null | 'confirm' | 'clarify' | 'team'
+  const [step, setStep] = useState(null);
   const [pendingStatus, setPendingStatus] = useState('');
   const [note, setNote] = useState('');
   const [clarifyUserId, setClarifyUserId] = useState('');
@@ -28,7 +28,6 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
     setTeamValue(defect.assigned_team || 'dev');
 
     if (needsClarificationTarget(s)) {
-      // Fetch QA users
       try {
         const res = await api.get('/users?role=qa');
         setQaUsers(res.data);
@@ -62,13 +61,13 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
   };
 
   return (
-    <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
         Change Status
       </div>
 
       {!step ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {transitions.map(s => {
             const color = STATUS_COLORS[s] || {};
             return (
@@ -76,7 +75,7 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
                 key={s}
                 onClick={() => handlePickStatus(s)}
                 style={{
-                  padding: '6px 14px', borderRadius: 6,
+                  padding: '5px 12px', borderRadius: 6,
                   border: `1px solid ${color.border || 'var(--border)'}`,
                   background: color.bg || 'var(--hover-bg)',
                   color: color.text || 'var(--text-primary)',
@@ -88,7 +87,7 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
           })}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
             Changing to: <StatusBadge status={pendingStatus} />
           </div>
@@ -118,7 +117,7 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
             value={note}
             onChange={e => setNote(e.target.value)}
             placeholder="Add a note (optional)..."
-            style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
+            style={{ ...inputStyle, minHeight: 56, resize: 'vertical' }}
           />
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -126,7 +125,7 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
               onClick={handleConfirm}
               disabled={loading || (step === 'clarify' && !clarifyUserId)}
               style={{
-                flex: 1, padding: '8px', background: '#0d9488', color: 'white',
+                flex: 1, padding: '7px', background: '#0d9488', color: 'white',
                 border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
                 opacity: (loading || (step === 'clarify' && !clarifyUserId)) ? 0.6 : 1,
               }}
@@ -134,7 +133,93 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
             <button
               onClick={() => setStep(null)}
               style={{
-                padding: '8px 14px', background: 'var(--hover-bg)', border: '1px solid var(--border)',
+                padding: '7px 12px', background: 'var(--hover-bg)', border: '1px solid var(--border)',
+                borderRadius: 6, fontSize: 13, cursor: 'pointer', color: 'var(--text-primary)',
+              }}
+            >Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Reassign Team Control (Developer + Admin) ─────────────────────────────────
+const ReassignTeamControl = ({ defect, onReassign, userRole }) => {
+  const [open, setOpen] = useState(false);
+  const [team, setTeam] = useState(defect.assigned_team || 'dev');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  if (userRole !== 'developer' && userRole !== 'admin') return null;
+
+  const TEAMS = [
+    { value: 'dev', label: 'Dev' },
+    { value: 'fmw', label: 'FMW' },
+    { value: 'mobility', label: 'Mobility' },
+  ];
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await onReassign(team);
+      setOpen(false);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Reassignment failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: '8px 10px', border: '1px solid var(--border)',
+    borderRadius: 6, fontSize: 13, background: 'var(--input-bg)', color: 'var(--text-primary)',
+  };
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        Reassign Team
+      </div>
+      {!open ? (
+        <button
+          onClick={() => { setTeam(defect.assigned_team || 'dev'); setError(''); setOpen(true); }}
+          style={{
+            padding: '5px 12px', borderRadius: 6, border: '1px solid #7c3aed',
+            background: '#f5f3ff', color: '#7c3aed',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}
+        >🔀 Reassign to another team</button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {error && (
+            <div style={{ fontSize: 11, color: '#dc2626', background: '#fee2e2', padding: '6px 8px', borderRadius: 5, border: '1px solid #fca5a5' }}>
+              {error}
+            </div>
+          )}
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4, display: 'block' }}>
+              Assign to team <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>(currently: {(defect.assigned_team || '—').toUpperCase()})</span>
+            </label>
+            <select value={team} onChange={e => setTeam(e.target.value)} style={inputStyle}>
+              {TEAMS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleConfirm}
+              disabled={loading || team === defect.assigned_team}
+              style={{
+                flex: 1, padding: '7px', background: '#7c3aed', color: 'white',
+                border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                opacity: (loading || team === defect.assigned_team) ? 0.5 : 1,
+              }}
+            >{loading ? 'Reassigning...' : 'Confirm Reassign'}</button>
+            <button
+              onClick={() => setOpen(false)}
+              style={{
+                padding: '7px 12px', background: 'var(--hover-bg)', border: '1px solid var(--border)',
                 borderRadius: 6, fontSize: 13, cursor: 'pointer', color: 'var(--text-primary)',
               }}
             >Cancel</button>
@@ -146,11 +231,9 @@ const StatusChangeControl = ({ defect, onStatusChange, userRole }) => {
 };
 
 // ── Edit Defect Form ───────────────────────────────────────────────────────────
-const EditDefectForm = ({ defect, projects, onSave, onCancel }) => {
-  const [modules, setModules] = useState([]);
+const EditDefectForm = ({ defect, onSave, onCancel }) => {
   const [form, setForm] = useState({
     title: defect.title,
-    module_id: defect.module_id || '',
     environment: defect.environment,
     severity: defect.severity,
     steps_to_reproduce: defect.steps_to_reproduce || '',
@@ -158,12 +241,6 @@ const EditDefectForm = ({ defect, projects, onSave, onCancel }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (defect.project_id) {
-      api.get(`/projects/${defect.project_id}/modules`).then(r => setModules(r.data)).catch(() => {});
-    }
-  }, [defect.project_id]);
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -195,34 +272,25 @@ const EditDefectForm = ({ defect, projects, onSave, onCancel }) => {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
         <div>
-          <label style={labelStyle}>Module</label>
-          <select style={inputStyle} value={form.module_id} onChange={e => setForm(f => ({ ...f, module_id: e.target.value }))}>
-            <option value="">None</option>
-            {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </div>
-        <div>
           <label style={labelStyle}>Environment</label>
           <select style={inputStyle} value={form.environment} onChange={e => setForm(f => ({ ...f, environment: e.target.value }))}>
             {['SIT', 'UAT', 'PROD'].map(e => <option key={e} value={e}>{e}</option>)}
           </select>
         </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
         <div>
           <label style={labelStyle}>Severity</label>
           <select style={inputStyle} value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
             {['Sev1', 'Sev2', 'Sev3', 'Observation'].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        <div>
-          <label style={labelStyle}>Assigned Team</label>
-          <select style={inputStyle} value={form.assigned_team} onChange={e => setForm(f => ({ ...f, assigned_team: e.target.value }))}>
-            <option value="dev">Dev</option>
-            <option value="fmw">FMW</option>
-            <option value="mobility">Mobility</option>
-          </select>
-        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label style={labelStyle}>Assigned Team</label>
+        <select style={inputStyle} value={form.assigned_team} onChange={e => setForm(f => ({ ...f, assigned_team: e.target.value }))}>
+          <option value="dev">Dev</option>
+          <option value="fmw">FMW</option>
+          <option value="mobility">Mobility</option>
+        </select>
       </div>
       <div style={{ marginBottom: 12 }}>
         <label style={labelStyle}>Steps to Reproduce</label>
@@ -247,7 +315,6 @@ const AttachmentsPanel = ({ defectId, attachments, currentUser, onRefresh }) => 
   const fileRef = useRef(null);
 
   const apiBase = process.env.REACT_APP_API_URL?.replace('/api', '') || '';
-
   const isImage = (name) => /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(name);
 
   const handleUpload = async () => {
@@ -280,35 +347,35 @@ const AttachmentsPanel = ({ defectId, attachments, currentUser, onRefresh }) => 
   const canDelete = (att) =>
     currentUser?.role === 'pm' || currentUser?.role === 'admin' || att.uploaded_by === currentUser?.id;
 
-  const labelStyle = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, display: 'block' };
+  const labelStyle = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'block' };
 
   return (
-    <div style={{ marginTop: 14 }}>
+    <div>
       <span style={labelStyle}>Attachments ({attachments.length})</span>
 
       {attachments.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {attachments.map(a => {
-            const fileUrl = `${apiBase}/uploads/${a.file_path.split('/').pop()}`;
+            const fileUrl = `${apiBase}/uploads/${a.file_path}`;
             return (
               <div key={a.id} style={{
-                border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden',
+                border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden',
                 background: 'var(--hover-bg)',
               }}>
                 {isImage(a.file_name) && (
                   <a href={fileUrl} target="_blank" rel="noreferrer">
-                    <img src={fileUrl} alt={a.file_name} style={{ width: '100%', maxHeight: 120, objectFit: 'cover', display: 'block' }} />
+                    <img src={fileUrl} alt={a.file_name} style={{ width: '100%', maxHeight: 80, objectFit: 'cover', display: 'block' }} />
                   </a>
                 )}
-                <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 16 }}>{isImage(a.file_name) ? '🖼' : '📎'}</span>
+                <div style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>{isImage(a.file_name) ? '🖼' : '📎'}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.file_name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.uploaded_by_name} · {formatDate(a.uploaded_at)}</div>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.file_name}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{a.uploaded_by_name} · {formatDate(a.uploaded_at)}</div>
                   </div>
                   <a href={fileUrl} download={a.file_name} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#3b82d4', fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>↓</a>
                   {canDelete(a) && (
-                    <button onClick={() => handleDelete(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 13, flexShrink: 0 }}>✕</button>
+                    <button onClick={() => handleDelete(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: 12, flexShrink: 0 }}>✕</button>
                   )}
                 </div>
               </div>
@@ -317,21 +384,21 @@ const AttachmentsPanel = ({ defectId, attachments, currentUser, onRefresh }) => 
         </div>
       )}
 
-      {/* Upload more */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Upload new files */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         <input
           ref={fileRef}
           type="file"
           multiple
           accept="image/*,application/pdf,.txt,.log,.zip"
           onChange={e => setFiles(Array.from(e.target.files))}
-          style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+          style={{ fontSize: 11, color: 'var(--text-secondary)' }}
         />
         {files.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {files.map((f, i) => (
-              <span key={i} style={{ fontSize: 11, background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 7px', color: 'var(--text-secondary)' }}>
-                {f.name} ({(f.size / 1024).toFixed(0)}KB)
+              <span key={i} style={{ fontSize: 10, background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', color: 'var(--text-secondary)' }}>
+                {f.name}
               </span>
             ))}
           </div>
@@ -350,40 +417,62 @@ const AttachmentsPanel = ({ defectId, attachments, currentUser, onRefresh }) => 
   );
 };
 
+// ── Collapsible section ────────────────────────────────────────────────────────
+const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ borderTop: '1px solid var(--border)', marginTop: 10 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', textAlign: 'left', padding: '8px 0',
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}
+      >
+        {title}
+        <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div style={{ paddingBottom: 8 }}>{children}</div>}
+    </div>
+  );
+};
+
 // ── Info Panel ─────────────────────────────────────────────────────────────────
-const InfoPanel = ({ defect, projects, onStatusChange, onEditSave, userRole, currentUser }) => {
+const InfoPanel = ({ defect, onStatusChange, onEditSave, onReassign, userRole, currentUser }) => {
   const [editing, setEditing] = useState(false);
 
   const canEdit =
     userRole === 'admin' || userRole === 'pm' ||
     (userRole === 'qa' && defect.raised_by_user_id === currentUser?.id);
 
-  const fieldStyle = { marginBottom: 14 };
-  const labelStyle = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' };
-  const valueStyle = { fontSize: 14, color: 'var(--text-primary)' };
+  const fieldStyle = { marginBottom: 10 };
+  const labelStyle = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3, display: 'block' };
+  const valueStyle = { fontSize: 13, color: 'var(--text-primary)' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Title bar */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Defect #{defect.id}</div>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>{defect.title}</h2>
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Defect #{defect.id}</div>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>{defect.title}</h2>
         {defect.edited_at && (
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Edited {formatDate(defect.edited_at)}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>Edited {formatDate(defect.edited_at)}</div>
         )}
         {canEdit && !editing && (
           <button onClick={() => setEditing(true)} style={{
-            marginTop: 10, padding: '5px 12px', background: 'var(--hover-bg)', border: '1px solid var(--border)',
-            borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500, color: 'var(--text-secondary)',
+            marginTop: 8, padding: '4px 10px', background: 'var(--hover-bg)', border: '1px solid var(--border)',
+            borderRadius: 6, fontSize: 11, cursor: 'pointer', fontWeight: 500, color: 'var(--text-secondary)',
           }}>✏ Edit</button>
         )}
       </div>
 
-      <div style={{ padding: 20, flex: 1 }}>
+      <div style={{ padding: '12px 16px', flex: 1, overflowY: 'auto' }}>
         {editing ? (
           <EditDefectForm
             defect={defect}
-            projects={projects}
             onSave={async (form) => {
               await onEditSave(form);
               setEditing(false);
@@ -392,11 +481,12 @@ const InfoPanel = ({ defect, projects, onStatusChange, onEditSave, userRole, cur
           />
         ) : (
           <>
+            {/* ── Always-visible top section ──────────────────────────────── */}
             <div style={fieldStyle}>
               <span style={labelStyle}>Status</span>
               <StatusBadge status={defect.status} size="lg" />
               {defect.status === 'Need Clarification' && defect.clarification_assigned_to_name && (
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
                   Awaiting: <strong>{defect.clarification_assigned_to_name}</strong>
                 </div>
               )}
@@ -406,23 +496,19 @@ const InfoPanel = ({ defect, projects, onStatusChange, onEditSave, userRole, cur
               <SeverityBadge severity={defect.severity} size="lg" />
             </div>
             <div style={fieldStyle}>
+              <span style={labelStyle}>Environment</span>
+              <span style={{
+                ...valueStyle, display: 'inline-block', padding: '2px 10px',
+                background: '#dbeafe', color: '#1d4ed8', borderRadius: 4, fontWeight: 600, fontSize: 12,
+              }}>{defect.environment}</span>
+            </div>
+            <div style={fieldStyle}>
               <span style={labelStyle}>Project</span>
               <span style={valueStyle}>{defect.project_name || '—'}</span>
             </div>
             <div style={fieldStyle}>
-              <span style={labelStyle}>Module</span>
-              <span style={valueStyle}>{defect.module_name || '—'}</span>
-            </div>
-            <div style={fieldStyle}>
-              <span style={labelStyle}>Environment</span>
-              <span style={{
-                ...valueStyle, display: 'inline-block', padding: '2px 10px',
-                background: '#dbeafe', color: '#1d4ed8', borderRadius: 4, fontWeight: 600, fontSize: 13,
-              }}>{defect.environment}</span>
-            </div>
-            <div style={fieldStyle}>
               <span style={labelStyle}>Assigned Team</span>
-              <span style={{ ...valueStyle, textTransform: 'uppercase', fontWeight: 600, color: '#7c3aed' }}>
+              <span style={{ ...valueStyle, textTransform: 'uppercase', fontWeight: 600, color: '#7c3aed', fontSize: 12 }}>
                 {defect.assigned_team}
               </span>
             </div>
@@ -430,36 +516,46 @@ const InfoPanel = ({ defect, projects, onStatusChange, onEditSave, userRole, cur
               <span style={labelStyle}>Raised By</span>
               <span style={valueStyle}>{defect.raised_by_name || '—'}</span>
             </div>
-            <div style={fieldStyle}>
-              <span style={labelStyle}>Created</span>
-              <span style={{ ...valueStyle, fontSize: 12, color: 'var(--text-secondary)' }}>{formatDate(defect.created_at)}</span>
+
+            {/* ── Attachments — visible without scrolling ──────────────── */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+              <AttachmentsPanel
+                defectId={defect.id}
+                attachments={defect.attachments || []}
+                currentUser={currentUser}
+                onRefresh={() => window.location.reload()}
+              />
             </div>
-            <div style={fieldStyle}>
-              <span style={labelStyle}>Last Updated</span>
-              <span style={{ ...valueStyle, fontSize: 12, color: 'var(--text-secondary)' }}>{formatDate(defect.updated_at)}</span>
-            </div>
 
-            {defect.steps_to_reproduce && (
-              <div style={{ ...fieldStyle, marginTop: 8 }}>
-                <span style={labelStyle}>Steps to Reproduce</span>
-                <pre style={{
-                  fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg)',
-                  borderRadius: 6, padding: 12, whiteSpace: 'pre-wrap',
-                  border: '1px solid var(--border)', lineHeight: 1.6,
-                }}>{defect.steps_to_reproduce}</pre>
-              </div>
-            )}
-
-            {/* Attachments */}
-            <AttachmentsPanel
-              defectId={defect.id}
-              attachments={defect.attachments || []}
-              currentUser={currentUser}
-              onRefresh={() => window.location.reload()}
-            />
-
-            {/* Status Change Control */}
+            {/* ── Status Change Control ────────────────────────────────── */}
             <StatusChangeControl defect={defect} onStatusChange={onStatusChange} userRole={userRole} />
+
+            {/* ── Reassign Team Control (developer + admin only) ───────── */}
+            <ReassignTeamControl defect={defect} onReassign={onReassign} userRole={userRole} />
+
+            {/* ── Collapsible: less-frequent details ───────────────────── */}
+            <CollapsibleSection title="More Details">
+              <div style={{ paddingTop: 4 }}>
+                <div style={{ ...fieldStyle, marginBottom: 8 }}>
+                  <span style={labelStyle}>Created</span>
+                  <span style={{ ...valueStyle, fontSize: 12, color: 'var(--text-secondary)' }}>{formatDate(defect.created_at)}</span>
+                </div>
+                <div style={{ ...fieldStyle, marginBottom: 8 }}>
+                  <span style={labelStyle}>Last Updated</span>
+                  <span style={{ ...valueStyle, fontSize: 12, color: 'var(--text-secondary)' }}>{formatDate(defect.updated_at)}</span>
+                </div>
+                {defect.steps_to_reproduce && (
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={labelStyle}>Steps to Reproduce</span>
+                    <pre style={{
+                      fontSize: 11, color: 'var(--text-primary)', background: 'var(--bg)',
+                      borderRadius: 6, padding: 10, whiteSpace: 'pre-wrap',
+                      border: '1px solid var(--border)', lineHeight: 1.6,
+                    }}>{defect.steps_to_reproduce}</pre>
+                  </div>
+                )}
+              </div>
+            </CollapsibleSection>
           </>
         )}
       </div>
@@ -593,7 +689,6 @@ const AuditTrail = ({ auditLog }) => {
           <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)', fontSize: 13 }}>No history yet</div>
         ) : (
           <div style={{ position: 'relative', paddingLeft: 28 }}>
-            {/* Vertical line */}
             <div style={{
               position: 'absolute', left: 7, top: 4, bottom: 4,
               width: 2, background: 'var(--border)',
@@ -601,13 +696,13 @@ const AuditTrail = ({ auditLog }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {auditLog.map((entry) => {
                 const isEdit = entry.note?.startsWith('Defect edited by');
+                const isReassign = entry.note?.startsWith('Reassigned from');
                 const newColors = STATUS_COLORS[entry.new_status] || { bg: 'var(--hover-bg)', text: 'var(--text-secondary)', border: 'var(--border)', dot: 'var(--text-muted)' };
                 const oldColors = STATUS_COLORS[entry.old_status] || { bg: 'var(--hover-bg)', text: 'var(--text-secondary)', border: 'var(--border)' };
-                const dotColor = isEdit ? '#7c3aed' : (newColors.dot || newColors.text);
+                const dotColor = isReassign ? '#7c3aed' : isEdit ? '#94a3b8' : (newColors.dot || newColors.text);
 
                 return (
                   <div key={entry.id} style={{ display: 'flex', gap: 12, paddingBottom: 18, position: 'relative' }}>
-                    {/* Dot */}
                     <div style={{
                       width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
                       background: dotColor,
@@ -615,9 +710,12 @@ const AuditTrail = ({ auditLog }) => {
                       marginLeft: -21, zIndex: 1, marginTop: 3,
                       boxShadow: `0 0 0 2px ${dotColor}40`,
                     }} />
-                    {/* Content */}
                     <div style={{ flex: 1 }}>
-                      {isEdit ? (
+                      {isReassign ? (
+                        <div style={{ fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>
+                          🔀 {entry.note}
+                        </div>
+                      ) : isEdit ? (
                         <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                           ✏ {entry.note}
                         </div>
@@ -641,7 +739,7 @@ const AuditTrail = ({ auditLog }) => {
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
                         by {entry.changed_by_name || 'System'}
                       </div>
-                      {entry.note && !isEdit && (
+                      {entry.note && !isEdit && !isReassign && (
                         <div style={{
                           marginTop: 4, fontSize: 11, color: 'var(--text-secondary)',
                           background: 'var(--hover-bg)', padding: '4px 8px',
@@ -669,7 +767,6 @@ export default function DefectDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [defect, setDefect] = useState(null);
-  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
@@ -691,7 +788,6 @@ export default function DefectDetail() {
   };
 
   useEffect(() => { fetchDefect(); }, [id]);
-  useEffect(() => { api.get('/projects').then(r => setProjects(r.data)).catch(() => {}); }, []);
 
   const handleStatusChange = async (payload) => {
     await api.patch(`/defects/${id}/status`, payload);
@@ -703,6 +799,12 @@ export default function DefectDetail() {
     await api.patch(`/defects/${id}`, form);
     fetchDefect();
     showToast('Defect saved successfully');
+  };
+
+  const handleTeamReassign = async (assigned_team) => {
+    await api.patch(`/defects/${id}/team`, { assigned_team });
+    fetchDefect();
+    showToast(`Defect reassigned to ${assigned_team.toUpperCase()}`);
   };
 
   const handleAddComment = async (message) => {
@@ -767,9 +869,9 @@ export default function DefectDetail() {
         }}>
           <InfoPanel
             defect={defect}
-            projects={projects}
             onStatusChange={handleStatusChange}
             onEditSave={handleEditSave}
+            onReassign={handleTeamReassign}
             userRole={user?.role}
             currentUser={user}
           />

@@ -1,17 +1,17 @@
 # DefectTrack — Full-Stack Defect Tracking System
 
-A modern, role-based defect tracking application built with React, Node.js/Express, and PostgreSQL.
+A modern, role-based defect tracking application built with React, Node.js/Express, and Oracle SQL.
 
 ---
 
 ## Features
 
 - **4 Roles**: QA, Developer, PM, Admin — each with a tailored dashboard
-- **Defect Lifecycle**: Open → Assigned → In Progress → Fixed → Retest → Reopen → Closed
+- **Defect Lifecycle**: Open → Need Clarification → Retest → Reopen → Closed
 - **Slack Integration**: `/raise-defect` slash command with Block Kit modal
 - **Email Notifications**: On every status change via Nodemailer
 - **CSV Export**: PM can export full defect list
-- **Charts**: Defects by module, status, team, and time (Recharts)
+- **Charts**: Defects by severity, status, team, and time (Recharts)
 - **Audit Trail**: Full chronological status history with colored pills
 - **Comment Thread**: Chat-style discussion on each defect
 - **File Attachments**: Multi-file upload per defect (Multer)
@@ -26,7 +26,7 @@ A modern, role-based defect tracking application built with React, Node.js/Expre
 |----------|-----------------------------------|
 | Frontend | React 18, React Router v6, Recharts, Axios |
 | Backend  | Node.js, Express.js               |
-| Database | PostgreSQL 15                     |
+| Database | Oracle SQL (node-oracledb, Thick mode for Oracle 11g) |
 | Auth     | JWT (jsonwebtoken + bcryptjs)     |
 | Email    | Nodemailer (SMTP)                 |
 | Slack    | @slack/bolt SDK                   |
@@ -42,15 +42,15 @@ defect-tracker/
 ├── backend/
 │   ├── src/
 │   │   ├── db/
-│   │   │   ├── pool.js          # PostgreSQL connection pool
-│   │   │   ├── migrate.js       # DB schema migrations
+│   │   │   ├── pool.js          # Oracle connection pool (oracledb Thick mode)
+│   │   │   ├── migrate.js       # DB schema migrations (DROP + recreate)
 │   │   │   └── seed.js          # Initial seed data
 │   │   ├── middleware/
 │   │   │   └── auth.js          # JWT auth + role guard middleware
 │   │   ├── routes/
 │   │   │   ├── auth.js          # POST /login, GET /me
 │   │   │   ├── users.js         # Admin user management
-│   │   │   ├── projects.js      # Projects + modules CRUD
+│   │   │   ├── projects.js      # Projects CRUD
 │   │   │   └── defects.js       # Full defect lifecycle API
 │   │   ├── services/
 │   │   │   ├── email.js         # Nodemailer email service
@@ -73,7 +73,7 @@ defect-tracker/
 │   │   │   ├── QADashboard.js   # My defects + raise button
 │   │   │   ├── DevDashboard.js  # Team queue + inline status changes
 │   │   │   ├── PMDashboard.js   # Charts + full defect table + export
-│   │   │   ├── AdminPanel.js    # User management + module management
+│   │   │   ├── AdminPanel.js    # User management + project list
 │   │   │   ├── DefectList.js    # Filterable defect table
 │   │   │   └── DefectDetail.js  # 3-panel: Info | Comments | Audit Trail
 │   │   ├── services/
@@ -126,7 +126,7 @@ docker-compose exec backend node src/db/seed.js
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL 15+
+- Access to Oracle DB (10.59.7.174:1521/XE)
 
 ### Backend
 
@@ -134,12 +134,9 @@ docker-compose exec backend node src/db/seed.js
 cd backend
 npm install
 cp .env.example .env
-# Edit .env with your database URL, JWT secret, SMTP, Slack
+# Edit .env — set Oracle credentials, JWT secret, SMTP, Slack
 
-# Create the database
-createdb defect_tracker
-
-# Run migrations
+# Run migrations (drops and recreates all tables)
 npm run migrate
 
 # Seed initial data
@@ -176,19 +173,24 @@ npm start
 
 ### Backend (`backend/.env`)
 
-| Variable             | Description                              |
-|----------------------|------------------------------------------|
-| `DATABASE_URL`       | PostgreSQL connection string             |
-| `JWT_SECRET`         | Secret key for JWT signing               |
-| `SMTP_HOST`          | SMTP server hostname                     |
-| `SMTP_PORT`          | SMTP port (587 for TLS, 465 for SSL)     |
-| `SMTP_USER`          | SMTP username/email                      |
-| `SMTP_PASS`          | SMTP password / app password             |
-| `SLACK_BOT_TOKEN`    | Slack Bot OAuth token (xoxb-...)         |
-| `SLACK_SIGNING_SECRET` | Slack app signing secret               |
-| `SLACK_CHANNEL_ID`   | Channel ID for notifications             |
-| `APP_BASE_URL`       | Frontend URL (for email/Slack links)     |
-| `PORT`               | Backend server port (default: 5000)      |
+| Variable                 | Description                                                        |
+|--------------------------|--------------------------------------------------------------------|
+| `ORACLE_HOST`            | Oracle DB hostname or IP                                           |
+| `ORACLE_PORT`            | Oracle DB port (default: 1521)                                     |
+| `ORACLE_SERVICE_NAME`    | Oracle service name (e.g. XE)                                      |
+| `ORACLE_USER`            | Oracle DB username                                                 |
+| `ORACLE_PASSWORD`        | Oracle DB password                                                 |
+| `ORACLE_CLIENT_LIB_DIR`  | Path to Oracle Instant Client directory (required for Oracle 11g)  |
+| `JWT_SECRET`             | Secret key for JWT signing                                         |
+| `SMTP_HOST`            | SMTP server hostname                     |
+| `SMTP_PORT`            | SMTP port (587 for TLS, 465 for SSL)     |
+| `SMTP_USER`            | SMTP username/email                      |
+| `SMTP_PASS`            | SMTP password / app password             |
+| `SLACK_BOT_TOKEN`      | Slack Bot OAuth token (xoxb-...)         |
+| `SLACK_SIGNING_SECRET` | Slack app signing secret                 |
+| `SLACK_CHANNEL_ID`     | Channel ID for notifications             |
+| `APP_BASE_URL`         | Frontend URL (for email/Slack links)     |
+| `PORT`                 | Backend server port (default: 5000)      |
 
 ### Frontend (`frontend/.env`)
 
@@ -207,24 +209,26 @@ npm start
 | GET    | /api/auth/me     | Get current user     |
 
 ### Defects
-| Method | Endpoint                     | Description                      |
-|--------|------------------------------|----------------------------------|
-| GET    | /api/defects                 | List defects (role-filtered)     |
-| POST   | /api/defects                 | Create defect (QA/Admin)         |
-| GET    | /api/defects/:id             | Get defect with comments + audit |
-| PATCH  | /api/defects/:id/status      | Update defect status             |
-| POST   | /api/defects/:id/comments    | Add comment                      |
-| POST   | /api/defects/:id/attachments | Upload files                     |
-| GET    | /api/defects/stats           | Aggregated stats (PM/Admin)      |
-| GET    | /api/defects/export/csv      | Export to CSV (PM/Admin)         |
+| Method | Endpoint                          | Description                                  |
+|--------|-----------------------------------|----------------------------------------------|
+| GET    | /api/defects                      | List defects (role-filtered)                 |
+| POST   | /api/defects                      | Create defect with attachments (QA/PM/Admin) |
+| GET    | /api/defects/:id                  | Get defect with comments, attachments, audit |
+| PATCH  | /api/defects/:id                  | Edit defect fields (QA-own / PM / Admin)     |
+| PATCH  | /api/defects/:id/status           | Update defect status                         |
+| PATCH  | /api/defects/:id/team             | Reassign to team (Developer / Admin)         |
+| POST   | /api/defects/:id/comments         | Add comment                                  |
+| POST   | /api/defects/:id/attachments      | Upload multiple files (all roles)            |
+| DELETE | /api/defects/:id/attachments/:aid | Delete attachment (uploader / PM / Admin)    |
+| GET    | /api/defects/search               | Search by title or ID                        |
+| GET    | /api/defects/stats                | Aggregated stats (PM/Admin)                  |
+| GET    | /api/defects/export/csv           | Export to CSV (PM/Admin)                     |
 
 ### Projects
-| Method | Endpoint                    | Description             |
-|--------|-----------------------------|-------------------------|
-| GET    | /api/projects               | List projects           |
-| POST   | /api/projects               | Create project (Admin)  |
-| GET    | /api/projects/:id/modules   | List modules            |
-| POST   | /api/projects/:id/modules   | Add module (Admin)      |
+| Method | Endpoint      | Description             |
+|--------|---------------|-------------------------|
+| GET    | /api/projects | List projects           |
+| POST   | /api/projects | Create project (Admin)  |
 
 ### Users
 | Method | Endpoint            | Description             |
@@ -253,7 +257,6 @@ npm start
 On first `npm run seed`:
 
 - **Projects**: "Regression Defects", "PR Defects"
-- **Modules per project**: Login, Dashboard, Reports, Lubes Indent, M&P Activity, Customer Profile
 - **Admin user**: username `admin`, password `Admin@123`
 
 ---
@@ -268,20 +271,21 @@ On first `npm run seed`:
 | View all defects          |    |            | ✅ | ✅    |
 | Change status (Dev flow)  |    | ✅         |    | ✅    |
 | Change status (QA flow)   | ✅ |            |    | ✅    |
+| Reassign defect to team   |    | ✅         |    | ✅    |
+| Upload/view attachments   | ✅ | ✅         | ✅ | ✅    |
 | Export CSV                |    |            | ✅ | ✅    |
 | View charts               |    |            | ✅ | ✅    |
 | Manage users              |    |            |    | ✅    |
-| Manage modules            |    |            |    | ✅    |
 
 ---
 
 ## Status Flow
 
 ```
-Open → Assigned → In Progress → Fixed → Retest → Closed
-         ↑          ↑    ↓              ↓    ↓
-         └──────────┴── Reopen ────────┘    ↓
-                                        Reopen → ...
+Open → Need Clarification → Open (QA resolves)
+Open → Retest → Closed
+Open → Retest → Reopen → ...
+Open → Closed
 ```
 
 ## Color System

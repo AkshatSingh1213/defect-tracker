@@ -1,67 +1,65 @@
 require('dotenv').config();
-const pool = require('./pool');
+const oracledb = require('oracledb');
+oracledb.initOracleClient({ libDir: process.env.ORACLE_CLIENT_LIB_DIR });
 const bcrypt = require('bcryptjs');
 
 const seed = async () => {
-  const client = await pool.connect();
+  const conn = await oracledb.getConnection({
+    user: process.env.ORACLE_USER,
+    password: process.env.ORACLE_PASSWORD,
+    connectString: `${process.env.ORACLE_HOST}:${process.env.ORACLE_PORT}/${process.env.ORACLE_SERVICE_NAME}`,
+  });
+
   try {
-    await client.query('BEGIN');
-
-    // Seed admin user
+    // ── Admin user ─────────────────────────────────────────────────────────────
     const passwordHash = await bcrypt.hash('Admin@123', 12);
-    await client.query(`
-      INSERT INTO users (name, username, password_hash, role, email)
-      VALUES ('Administrator', 'admin', $1, 'admin', 'admin@defecttracker.com')
-      ON CONFLICT (username) DO NOTHING
-    `, [passwordHash]);
 
-    // Seed projects
-    const project1 = await client.query(`
-      INSERT INTO projects (name) VALUES ('Regression Defects')
-      ON CONFLICT DO NOTHING RETURNING id
-    `);
-    const project2 = await client.query(`
-      INSERT INTO projects (name) VALUES ('PR Defects')
-      ON CONFLICT DO NOTHING RETURNING id
-    `);
+    // Check if admin already exists
+    const existing = await conn.execute(
+      `SELECT id FROM users WHERE username = 'admin'`,
+      [],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
 
-    // Get project IDs (handle if already inserted)
-    const p1 = await client.query(`SELECT id FROM projects WHERE name='Regression Defects'`);
-    const p2 = await client.query(`SELECT id FROM projects WHERE name='PR Defects'`);
-    const pid1 = p1.rows[0]?.id;
-    const pid2 = p2.rows[0]?.id;
+    if (existing.rows.length === 0) {
+      await conn.execute(
+        `INSERT INTO users (name, username, password_hash, role, email)
+         VALUES ('Administrator', 'admin', :1, 'admin', 'admin@defecttracker.com')`,
+        [passwordHash],
+        { autoCommit: true }
+      );
+      console.log('✅ Admin user created');
+    } else {
+      console.log('ℹ️  Admin user already exists, skipping');
+    }
 
-    const sampleModules = ['Login', 'Dashboard', 'Reports', 'Lubes Indent', 'M&P Activity', 'Customer Profile'];
-
-    for (const modName of sampleModules) {
-      if (pid1) {
-        await client.query(`
-          INSERT INTO modules (project_id, name)
-          SELECT $1::integer, $2::text WHERE NOT EXISTS (
-            SELECT 1 FROM modules WHERE project_id=$1::integer AND name=$2::text
-          )
-        `, [pid1, modName]);
-      }
-      if (pid2) {
-        await client.query(`
-          INSERT INTO modules (project_id, name)
-          SELECT $1::integer, $2::text WHERE NOT EXISTS (
-            SELECT 1 FROM modules WHERE project_id=$1::integer AND name=$2::text
-          )
-        `, [pid2, modName]);
+    // ── Projects ───────────────────────────────────────────────────────────────
+    const projectNames = ['Regression Defects', 'PR Defects'];
+    for (const projName of projectNames) {
+      const exists = await conn.execute(
+        `SELECT id FROM projects WHERE name = :1`,
+        [projName],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT }
+      );
+      if (exists.rows.length === 0) {
+        await conn.execute(
+          `INSERT INTO projects (name) VALUES (:1)`,
+          [projName],
+          { autoCommit: true }
+        );
+        console.log(`✅ Project "${projName}" created`);
+      } else {
+        console.log(`ℹ️  Project "${projName}" already exists, skipping`);
       }
     }
 
-    await client.query('COMMIT');
     console.log('✅ Seed completed successfully');
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('❌ Seed failed:', err.message);
     throw err;
   } finally {
-    client.release();
-    await pool.end();
+    await conn.close();
   }
 };
 
-seed().catch(process.exit.bind(process, 1));
+seed().catch(err => { console.error(err); process.exit(1); });

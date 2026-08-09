@@ -8,23 +8,14 @@ export default function DefectList() {
   const navigate = useNavigate();
   const [defects, setDefects] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
-    project_id: '', module_id: '', status: '', severity: '', assigned_team: '',
+    project_id: '', status: '', severity: '', assigned_team: '',
   });
 
   useEffect(() => {
     api.get('/projects').then(r => setProjects(r.data));
   }, []);
-
-  useEffect(() => {
-    if (filters.project_id) {
-      api.get(`/projects/${filters.project_id}/modules`).then(r => setModules(r.data));
-    } else {
-      setModules([]);
-    }
-  }, [filters.project_id]);
 
   const fetchDefects = async () => {
     setLoading(true);
@@ -47,7 +38,7 @@ export default function DefectList() {
 
   const handleFilterChange = e => {
     const { name, value } = e.target;
-    setFilters(f => ({ ...f, [name]: value, ...(name === 'project_id' ? { module_id: '' } : {}) }));
+    setFilters(f => ({ ...f, [name]: value }));
   };
 
   return (
@@ -67,10 +58,6 @@ export default function DefectList() {
             <option value="">All Projects</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <select style={inputStyle} name="module_id" value={filters.module_id} onChange={handleFilterChange}>
-            <option value="">All Modules</option>
-            {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
           <select style={inputStyle} name="status" value={filters.status} onChange={handleFilterChange}>
             <option value="">All Statuses</option>
             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -85,7 +72,7 @@ export default function DefectList() {
             <option value="fmw">FMW</option>
             <option value="mobility">Mobility</option>
           </select>
-          <button onClick={() => setFilters({ project_id: '', module_id: '', status: '', severity: '', assigned_team: '' })} style={{
+          <button onClick={() => setFilters({ project_id: '', status: '', severity: '', assigned_team: '' })} style={{
             padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)',
             borderRadius: 6, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer',
           }}>Clear</button>
@@ -104,7 +91,7 @@ export default function DefectList() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['ID', 'Title', 'Project', 'Module', 'Severity', 'Status', 'Team', 'Raised By', 'Created'].map(h => (
+                  {['ID', 'Title', 'Project', 'Severity', 'Status', 'Team', 'Raised By', 'Created'].map(h => (
                     <th key={h} style={{
                       padding: '10px 16px', textAlign: 'left', fontSize: 12,
                       fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase',
@@ -127,7 +114,6 @@ export default function DefectList() {
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', whiteSpace: 'nowrap' }}>{d.title}</span>
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{d.project_name || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{d.module_name || '—'}</td>
                     <td style={{ padding: '12px 16px' }}><SeverityBadge severity={d.severity} /></td>
                     <td style={{ padding: '12px 16px' }}><StatusBadge status={d.status} /></td>
                     <td style={{ padding: '12px 16px', fontSize: 13, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{d.assigned_team}</td>

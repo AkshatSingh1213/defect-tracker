@@ -26,7 +26,6 @@ export default function PMDashboard() {
   const [defects, setDefects] = useState([]);
   const [stats, setStats] = useState(null);
   const [projects, setProjects] = useState([]);
-  const [modules, setModules] = useState([]);
   const [filters, setFilters] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('defects');
@@ -54,13 +53,6 @@ export default function PMDashboard() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => { api.get('/projects').then(r => setProjects(r.data)); }, []);
-  useEffect(() => {
-    if (filters.project_id) {
-      api.get(`/projects/${filters.project_id}/modules`).then(r => setModules(r.data));
-    } else {
-      setModules([]);
-    }
-  }, [filters.project_id]);
 
   const handleExport = async () => {
     const res = await api.get('/defects/export/csv', { responseType: 'blob' });
@@ -81,6 +73,12 @@ export default function PMDashboard() {
   const openCount = defects.filter(d => ['Open', 'Reopen'].includes(d.status)).length;
   const needClarCount = defects.filter(d => d.status === 'Need Clarification').length;
   const closedCount = defects.filter(d => d.status === 'Closed').length;
+
+  // Build "by severity" data from local defects list for the chart
+  const bySeverity = ['Sev1', 'Sev2', 'Sev3', 'Observation'].map(sev => ({
+    severity: sev,
+    count: defects.filter(d => d.severity === sev).length,
+  })).filter(s => s.count > 0);
 
   return (
     <div>
@@ -104,13 +102,9 @@ export default function PMDashboard() {
           </div>
           {activeTab === 'defects' && (
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <select style={inputStyle} value={filters.project_id || ''} onChange={e => setFilters(f => ({ ...f, project_id: e.target.value, module_id: '' }))}>
+              <select style={inputStyle} value={filters.project_id || ''} onChange={e => setFilters(f => ({ ...f, project_id: e.target.value }))}>
                 <option value="">All Projects</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <select style={inputStyle} value={filters.module_id || ''} onChange={e => setFilters(f => ({ ...f, module_id: e.target.value }))}>
-                <option value="">All Modules</option>
-                {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
               <select style={inputStyle} value={filters.status || ''} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
                 <option value="">All Statuses</option>
@@ -142,7 +136,7 @@ export default function PMDashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['ID', 'Title', 'Project', 'Module', 'Severity', 'Status', 'Team', 'Raised By', 'Created'].map(h => (
+                    {['ID', 'Title', 'Project', 'Severity', 'Status', 'Team', 'Raised By', 'Created'].map(h => (
                       <th key={h} style={{
                         padding: '10px 16px', textAlign: 'left', fontSize: 12,
                         fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase',
@@ -153,7 +147,7 @@ export default function PMDashboard() {
                 </thead>
                 <tbody>
                   {defects.length === 0 ? (
-                    <tr><td colSpan={9} style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)' }}>No defects found</td></tr>
+                    <tr><td colSpan={8} style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)' }}>No defects found</td></tr>
                   ) : defects.map(d => (
                     <tr key={d.id}
                       onClick={() => navigate(`/defects/${d.id}`)}
@@ -166,7 +160,6 @@ export default function PMDashboard() {
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', whiteSpace: 'nowrap' }}>{d.title}</span>
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{d.project_name || '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{d.module_name || '—'}</td>
                       <td style={{ padding: '12px 16px' }}><SeverityBadge severity={d.severity} /></td>
                       <td style={{ padding: '12px 16px' }}><StatusBadge status={d.status} /></td>
                       <td style={{ padding: '12px 16px', fontSize: 13, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{d.assigned_team}</td>
@@ -185,14 +178,18 @@ export default function PMDashboard() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 24 }}>
                 <div style={{ background: 'var(--hover-bg)', borderRadius: 10, padding: 20, border: '1px solid var(--border)' }}>
-                  <h4 style={{ marginBottom: 16, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Defects by Module</h4>
+                  <h4 style={{ marginBottom: 16, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Defects by Severity</h4>
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={stats.byModule} margin={{ top: 4, right: 8, left: -20, bottom: 40 }}>
+                    <BarChart data={bySeverity} margin={{ top: 4, right: 8, left: -20, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="module" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} angle={-30} textAnchor="end" interval={0} />
+                      <XAxis dataKey="severity" tick={{ fontSize: 12, fill: 'var(--text-secondary)' }} />
                       <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} allowDecimals={false} />
                       <Tooltip />
-                      <Bar dataKey="count" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                        {bySeverity.map((entry, index) => (
+                          <Cell key={entry.severity} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -229,7 +226,7 @@ export default function PMDashboard() {
                 <div style={{ background: 'var(--hover-bg)', borderRadius: 10, padding: 20, border: '1px solid var(--border)' }}>
                   <h4 style={{ marginBottom: 16, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Defects Raised Over Time</h4>
                   <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={stats.overTime.map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) }))} margin={{ top: 4, right: 8, left: -20, bottom: 10 }}>
+                    <LineChart data={stats.overTime.map(d => ({ ...d, date: new Date(d.created_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) }))} margin={{ top: 4, right: 8, left: -20, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
                       <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} allowDecimals={false} />

@@ -11,16 +11,20 @@ router.get('/', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin' && !role) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
-    let query = 'SELECT id, name, username, role, team, email, slack_user_id, is_active, created_at FROM users';
-    const params = [];
+    let result;
     if (role) {
-      query += ' WHERE role = $1 AND is_active = TRUE ORDER BY name ASC';
-      params.push(role);
+      result = await pool.query(
+        'SELECT id, name, username, role, team, email, slack_user_id, is_active, created_at FROM users WHERE role = :1 AND is_active = 1 ORDER BY name ASC',
+        [role]
+      );
     } else {
-      query += ' ORDER BY created_at DESC';
+      result = await pool.query(
+        'SELECT id, name, username, role, team, email, slack_user_id, is_active, created_at FROM users ORDER BY created_at DESC'
+      );
     }
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    // Normalize is_active: Oracle stores as 1/0, return true/false for frontend
+    const rows = result.rows.map(u => ({ ...u, is_active: u.is_active === 1 || u.is_active === true }));
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -30,7 +34,7 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/team/:team', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, username FROM users WHERE team = $1 AND role = $2 AND is_active = TRUE',
+      'SELECT id, name, username FROM users WHERE team = :1 AND role = :2 AND is_active = 1',
       [req.params.team, 'developer']
     );
     res.json(result.rows);
@@ -54,14 +58,23 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
 
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    const result = await pool.query(
+    // Check for duplicate username
+    const dup = await pool.query('SELECT id FROM users WHERE username = :1', [username]);
+    if (dup.rows.length > 0) return res.status(409).json({ error: 'Username already exists' });
+
+    await pool.query(
       `INSERT INTO users (name, username, password_hash, role, team, email, slack_user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, username, role, team, email, is_active, created_at`,
+       VALUES (:1, :2, :3, :4, :5, :6, :7)`,
       [name, username, passwordHash, role, team || null, email || null, slack_user_id || null]
     );
-    res.status(201).json(result.rows[0]);
+    const created = await pool.query(
+      'SELECT id, name, username, role, team, email, is_active, created_at FROM users WHERE username = :1',
+      [username]
+    );
+    const user = { ...created.rows[0], is_active: created.rows[0].is_active === 1 };
+    res.status(201).json(user);
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Username already exists' });
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -70,27 +83,39 @@ router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
 router.patch('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
   const { name, email, slack_user_id, is_active, team, role, password } = req.body;
   try {
-    // If password provided, hash and update it too
     if (password && password.trim()) {
       const passwordHash = await bcrypt.hash(password, 12);
-      await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, req.params.id]);
+      await pool.query('UPDATE users SET password_hash = :1 WHERE id = :2', [passwordHash, req.params.id]);
+    }
+
+    // Build dynamic UPDATE — only set fields that were provided
+    const updates = [];
+    const params = [];
+    let idx = 1;
+    if (name !== undefined)          { updates.push(`name = :${idx++}`);           params.push(name); }
+    if (email !== undefined)         { updates.push(`email = :${idx++}`);          params.push(email || null); }
+    if (slack_user_id !== undefined) { updates.push(`slack_user_id = :${idx++}`);  params.push(slack_user_id || null); }
+    if (is_active !== undefined)     { updates.push(`is_active = :${idx++}`);      params.push(is_active ? 1 : 0); }
+    if (team !== undefined)          { updates.push(`team = :${idx++}`);           params.push(team || null); }
+    if (role !== undefined)          { updates.push(`role = :${idx++}`);           params.push(role); }
+
+    if (updates.length > 0) {
+      params.push(req.params.id);
+      await pool.query(
+        `UPDATE users SET ${updates.join(', ')} WHERE id = :${idx}`,
+        params
+      );
     }
 
     const result = await pool.query(
-      `UPDATE users SET
-        name = COALESCE($1, name),
-        email = COALESCE($2, email),
-        slack_user_id = COALESCE($3, slack_user_id),
-        is_active = COALESCE($4, is_active),
-        team = COALESCE($5, team),
-        role = COALESCE($6, role)
-       WHERE id = $7
-       RETURNING id, name, username, role, team, email, is_active, slack_user_id`,
-      [name || null, email || null, slack_user_id || null, is_active !== undefined ? is_active : null, team || null, role || null, req.params.id]
+      'SELECT id, name, username, role, team, email, is_active, slack_user_id FROM users WHERE id = :1',
+      [req.params.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json(result.rows[0]);
+    const user = { ...result.rows[0], is_active: result.rows[0].is_active === 1 };
+    res.json(user);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -101,7 +126,7 @@ router.put('/:id/password', authenticateToken, requireRole('admin'), async (req,
   if (!password) return res.status(400).json({ error: 'Password required' });
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, req.params.id]);
+    await pool.query('UPDATE users SET password_hash = :1 WHERE id = :2', [passwordHash, req.params.id]);
     res.json({ message: 'Password updated' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

@@ -12,7 +12,7 @@ router.post('/login', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM users WHERE username = $1 AND is_active = TRUE',
+      'SELECT * FROM users WHERE username = :1 AND is_active = 1',
       [username]
     );
 
@@ -51,7 +51,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', require('../middleware/auth').authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, username, role, team, email FROM users WHERE id = $1',
+      'SELECT id, name, username, role, team, email FROM users WHERE id = :1',
       [req.user.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
